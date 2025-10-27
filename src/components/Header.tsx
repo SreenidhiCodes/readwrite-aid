@@ -10,7 +10,7 @@ export const Header = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-              ReadRight
+              SWAR-VANI
             </h1>
             <p className="text-xs text-muted-foreground">Your intelligent reading assistant</p>
           </div>
