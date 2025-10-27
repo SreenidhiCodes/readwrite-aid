@@ -4,6 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface AudioPlayerProps {
   text: string;
@@ -12,93 +20,142 @@ interface AudioPlayerProps {
 export const AudioPlayer = ({ text }: AudioPlayerProps) => {
   const { toast } = useToast();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [speed, setSpeed] = useState(1.0);
-  const [currentPosition, setCurrentPosition] = useState(0);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [voice, setVoice] = useState("Brian");
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Split text into chunks for better control
-  const textChunks = text.match(/.{1,200}(\s|$)/g) || [text];
-  const totalChunks = textChunks.length;
+  // Split text into chunks (ElevenLabs has character limits)
+  const chunkText = (text: string, maxLength: number = 2500) => {
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const chunks: string[] = [];
+    let currentChunk = "";
 
-  const speakText = (fromPosition: number = 0) => {
-    if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech
-      window.speechSynthesis.cancel();
+    for (const sentence of sentences) {
+      if ((currentChunk + sentence).length > maxLength) {
+        if (currentChunk) chunks.push(currentChunk.trim());
+        currentChunk = sentence;
+      } else {
+        currentChunk += sentence;
+      }
+    }
+    if (currentChunk) chunks.push(currentChunk.trim());
 
-      // Get UK English voice
-      const voices = window.speechSynthesis.getVoices();
-      const ukVoice = voices.find(voice => voice.lang === 'en-GB') || voices[0];
+    return chunks;
+  };
 
-      const utterance = new SpeechSynthesisUtterance(textChunks.slice(fromPosition).join(' '));
-      utterance.voice = ukVoice;
-      utterance.rate = speed;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-
-      utterance.onend = () => {
-        setIsPlaying(false);
-        setCurrentPosition(0);
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-        }
-      };
-
-      utterance.onerror = (error) => {
-        console.error('Speech error:', error);
-        toast({
-          title: "Error",
-          description: "Failed to play audio. Please try again.",
-          variant: "destructive",
-        });
-        setIsPlaying(false);
-      };
-
-      utteranceRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
-
-      // Simulate progress
-      intervalRef.current = setInterval(() => {
-        setCurrentPosition(prev => {
-          const next = prev + 1;
-          if (next >= totalChunks) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            return totalChunks;
-          }
-          return next;
-        });
-      }, 2000 / speed);
-
-    } else {
+  const generateAudio = async () => {
+    setIsGenerating(true);
+    try {
+      const chunks = chunkText(text);
+      
       toast({
-        title: "Not supported",
-        description: "Text-to-speech is not supported in your browser",
+        title: "Generating audio...",
+        description: `Processing ${chunks.length} text segment(s)`,
+      });
+
+      // Generate audio for first chunk only to keep it fast
+      // In production, you'd concatenate all chunks
+      const { data, error } = await supabase.functions.invoke('text-to-speech', {
+        body: { text: chunks[0], voice }
+      });
+
+      if (error) throw error;
+
+      if (data?.audioContent) {
+        // Create audio element with base64 data
+        const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+        
+        if (audioRef.current) {
+          audioRef.current.src = audioUrl;
+          audioRef.current.playbackRate = speed;
+          audioRef.current.load();
+        } else {
+          const audio = new Audio(audioUrl);
+          audio.playbackRate = speed;
+          audioRef.current = audio;
+
+          audio.onloadedmetadata = () => {
+            setDuration(audio.duration);
+          };
+
+          audio.onended = () => {
+            setIsPlaying(false);
+            setCurrentTime(0);
+            if (intervalRef.current) {
+              clearInterval(intervalRef.current);
+            }
+          };
+
+          audio.onerror = () => {
+            toast({
+              title: "Error",
+              description: "Failed to play audio",
+              variant: "destructive",
+            });
+            setIsPlaying(false);
+          };
+        }
+
+        toast({
+          title: "Ready to play!",
+          description: `Audio generated with ${voice} voice`,
+        });
+      }
+    } catch (error) {
+      console.error('Error generating audio:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate audio. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
-  const handlePlayPause = () => {
+  const handlePlayPause = async () => {
+    if (!audioRef.current) {
+      await generateAudio();
+      return;
+    }
+
     if (isPlaying) {
-      window.speechSynthesis.pause();
+      audioRef.current.pause();
       setIsPlaying(false);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     } else {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
+      try {
+        await audioRef.current.play();
         setIsPlaying(true);
-      } else {
-        speakText(currentPosition);
-        setIsPlaying(true);
+
+        // Update current time
+        intervalRef.current = setInterval(() => {
+          if (audioRef.current) {
+            setCurrentTime(audioRef.current.currentTime);
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Error playing audio:', error);
+        toast({
+          title: "Error",
+          description: "Failed to play audio",
+          variant: "destructive",
+        });
       }
     }
   };
 
   const handleRestart = () => {
-    window.speechSynthesis.cancel();
-    setCurrentPosition(0);
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      setCurrentTime(0);
+    }
     setIsPlaying(false);
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -109,31 +166,42 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
     const newSpeed = value[0];
     setSpeed(newSpeed);
     
-    // If currently playing, restart with new speed
-    if (isPlaying) {
-      window.speechSynthesis.cancel();
-      speakText(currentPosition);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = newSpeed;
     }
   };
 
-  useEffect(() => {
-    // Load voices when component mounts
-    const loadVoices = () => {
-      window.speechSynthesis.getVoices();
-    };
-    loadVoices();
-    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+  const handleVoiceChange = (newVoice: string) => {
+    setVoice(newVoice);
+    // Reset audio to regenerate with new voice
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  };
 
+  useEffect(() => {
     return () => {
-      window.speechSynthesis.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
     };
   }, []);
 
-  const progressPercentage = (currentPosition / totalChunks) * 100;
+  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
     <Card className="p-6 bg-card/80 backdrop-blur-sm border-border shadow-lg">
@@ -150,9 +218,10 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
             style={{ width: `${progressPercentage}%` }}
           />
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          {Math.round(progressPercentage)}% complete
-        </p>
+        <div className="flex justify-between text-xs text-muted-foreground mt-2">
+          <span>{formatTime(currentTime)}</span>
+          <span>{duration > 0 ? formatTime(duration) : '--:--'}</span>
+        </div>
       </div>
 
       {/* Controls */}
@@ -160,24 +229,44 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
         <Button
           onClick={handlePlayPause}
           size="lg"
+          disabled={isGenerating}
           className="bg-gradient-hero hover:opacity-90 transition-opacity"
         >
-          {isPlaying ? (
+          {isGenerating ? (
+            <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : isPlaying ? (
             <Pause className="h-5 w-5" />
           ) : (
             <Play className="h-5 w-5 ml-0.5" />
           )}
-          <span className="ml-2">{isPlaying ? "Pause" : "Play"}</span>
+          <span className="ml-2">
+            {isGenerating ? "Generating..." : isPlaying ? "Pause" : "Play"}
+          </span>
         </Button>
 
         <Button
           onClick={handleRestart}
           variant="secondary"
           size="lg"
+          disabled={!audioRef.current}
         >
           <RotateCcw className="h-5 w-5" />
           <span className="ml-2">Restart</span>
         </Button>
+      </div>
+
+      {/* Voice Selection */}
+      <div className="mb-6">
+        <label className="text-sm font-medium mb-2 block">Voice (UK English)</label>
+        <Select value={voice} onValueChange={handleVoiceChange}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Brian">Brian (Male)</SelectItem>
+            <SelectItem value="Alice">Alice (Female)</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Speed Control */}
