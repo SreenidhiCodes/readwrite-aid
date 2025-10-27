@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Configure PDF.js worker with correct path
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-}
+// Configure PDF.js worker for Vite
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url
+).toString();
 
 interface FileUploadProps {
   onTextExtracted: (text: string) => void;
@@ -20,6 +21,7 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
   const { toast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [googleDriveLink, setGoogleDriveLink] = useState("");
 
   const extractTextFromPDF = async (file: File) => {
     setIsProcessing(true);
@@ -110,6 +112,55 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
     if (file) handleFile(file);
   };
 
+  const handleGoogleDriveLink = async () => {
+    if (!googleDriveLink.trim()) {
+      toast({
+        title: "Invalid link",
+        description: "Please enter a valid Google Drive link",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    setProgress(10);
+
+    try {
+      // Extract file ID from Google Drive link
+      const fileIdMatch = googleDriveLink.match(/[-\w]{25,}/);
+      if (!fileIdMatch) {
+        throw new Error("Invalid Google Drive link format");
+      }
+
+      const fileId = fileIdMatch[0];
+      const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
+      setProgress(30);
+
+      // Fetch the PDF from Google Drive
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error("Failed to download PDF from Google Drive");
+      }
+
+      const blob = await response.blob();
+      const file = new File([blob], "document.pdf", { type: "application/pdf" });
+
+      setProgress(50);
+      await extractTextFromPDF(file);
+      setGoogleDriveLink("");
+    } catch (error) {
+      console.error("Error fetching from Google Drive:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load PDF from Google Drive. Make sure the file is publicly accessible.",
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+      setProgress(0);
+    }
+  };
+
   return (
     <div className="flex items-center justify-center min-h-[70vh]">
       <div className="w-full max-w-2xl">
@@ -173,11 +224,49 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           </div>
         </div>
 
-        <div className="mt-6 p-4 bg-accent/10 border border-accent/20 rounded-xl flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-accent flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-foreground/90">
-            <p className="font-medium mb-1">Supported files:</p>
-            <p className="text-muted-foreground">PDF documents with selectable text (up to 100MB)</p>
+        <div className="mt-6 space-y-4">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or</span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Google Drive Link</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={googleDriveLink}
+                onChange={(e) => setGoogleDriveLink(e.target.value)}
+                placeholder="Paste your Google Drive link here"
+                disabled={isProcessing}
+                className="flex-1 px-4 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <Button
+                onClick={handleGoogleDriveLink}
+                disabled={isProcessing || !googleDriveLink.trim()}
+                variant="secondary"
+              >
+                Load PDF
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Make sure the file is set to "Anyone with the link can view"
+            </p>
+          </div>
+
+          <div className="p-4 bg-accent/10 border border-accent/20 rounded-xl flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-accent flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-foreground/90">
+              <p className="font-medium mb-1">Supported sources:</p>
+              <p className="text-muted-foreground">
+                • PDF documents with selectable text (up to 100MB)<br />
+                • Google Drive links (file must be publicly accessible)
+              </p>
+            </div>
           </div>
         </div>
       </div>
