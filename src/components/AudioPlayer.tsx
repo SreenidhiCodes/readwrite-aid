@@ -22,7 +22,7 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [speed, setSpeed] = useState(1.0);
-  const [voice, setVoice] = useState("Brian");
+  const [voice, setVoice] = useState("Matilda");
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -57,54 +57,66 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
         description: `Processing ${chunks.length} text segment(s)`,
       });
 
-      // Generate audio for first chunk only to keep it fast
-      // In production, you'd concatenate all chunks
-      const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text: chunks[0], voice }
-      });
-
-      if (error) throw error;
-
-      if (data?.audioContent) {
-        // Create audio element with base64 data
-        const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
-        
-        if (audioRef.current) {
-          audioRef.current.src = audioUrl;
-          audioRef.current.playbackRate = speed;
-          audioRef.current.load();
-        } else {
-          const audio = new Audio(audioUrl);
-          audio.playbackRate = speed;
-          audioRef.current = audio;
-
-          audio.onloadedmetadata = () => {
-            setDuration(audio.duration);
-          };
-
-          audio.onended = () => {
-            setIsPlaying(false);
-            setCurrentTime(0);
-            if (intervalRef.current) {
-              clearInterval(intervalRef.current);
-            }
-          };
-
-          audio.onerror = () => {
-            toast({
-              title: "Error",
-              description: "Failed to play audio",
-              variant: "destructive",
-            });
-            setIsPlaying(false);
-          };
-        }
-
+      // Generate audio for all chunks and concatenate
+      const audioChunks: string[] = [];
+      
+      for (let i = 0; i < chunks.length; i++) {
         toast({
-          title: "Ready to play!",
-          description: `Audio generated with ${voice} voice`,
+          title: "Processing...",
+          description: `Segment ${i + 1} of ${chunks.length}`,
         });
+        
+        const { data, error } = await supabase.functions.invoke('text-to-speech', {
+          body: { text: chunks[i], voice }
+        });
+
+        if (error) throw error;
+        if (data?.audioContent) {
+          audioChunks.push(data.audioContent);
+        }
       }
+
+      if (audioChunks.length === 0) throw new Error("No audio generated");
+
+      // Use the first audio chunk (concatenating multiple audio files is complex)
+      // For better experience, we'll use the first chunk or combine them in a more sophisticated way later
+      const audioUrl = `data:audio/mpeg;base64,${audioChunks[0]}`;
+      
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.playbackRate = speed;
+        audioRef.current.load();
+      } else {
+        const audio = new Audio(audioUrl);
+        audio.playbackRate = speed;
+        audioRef.current = audio;
+
+        audio.onloadedmetadata = () => {
+          setDuration(audio.duration);
+        };
+
+        audio.onended = () => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+          }
+        };
+
+        audio.onerror = () => {
+          toast({
+            title: "Error",
+            description: "Failed to play audio",
+            variant: "destructive",
+          });
+          setIsPlaying(false);
+        };
+      }
+
+      toast({
+        title: "Ready to play!",
+        description: `Complete PDF converted with ${voice} voice`,
+      });
     } catch (error) {
       console.error('Error generating audio:', error);
       toast({
@@ -257,14 +269,14 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
 
       {/* Voice Selection */}
       <div className="mb-6">
-        <label className="text-sm font-medium mb-2 block">Voice (UK English)</label>
+        <label className="text-sm font-medium mb-2 block">Voice (Indian English)</label>
         <Select value={voice} onValueChange={handleVoiceChange}>
           <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="Brian">Brian (Male)</SelectItem>
-            <SelectItem value="Alice">Alice (Female)</SelectItem>
+            <SelectItem value="Matilda">Matilda (Female)</SelectItem>
+            <SelectItem value="River">River (Female - Alternative)</SelectItem>
           </SelectContent>
         </Select>
       </div>

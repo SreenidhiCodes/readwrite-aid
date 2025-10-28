@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voice = "Brian" } = await req.json();
+    const { text, voice = "Matilda" } = await req.json();
 
     if (!text) {
       throw new Error('Text is required');
@@ -25,11 +25,11 @@ serve(async (req) => {
 
     // Voice ID mapping for ElevenLabs
     const voiceIds: Record<string, string> = {
-      "Brian": "nPczCjzI2devNBz1zQrb", // UK male voice
-      "Alice": "Xb7hH8MSUJpSbSDYk0k2", // UK female voice
+      "Matilda": "XrExE9yKIg1WjnnlVkGX", // Indian English female voice
+      "River": "SAz9YHcvj6GT2YYXdXww", // Indian English female voice (alternative)
     };
 
-    const voiceId = voiceIds[voice] || voiceIds["Brian"];
+    const voiceId = voiceIds[voice] || voiceIds["Matilda"];
 
     console.log(`Generating speech with voice: ${voice} (${voiceId})`);
 
@@ -45,7 +45,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           text: text,
-          model_id: 'eleven_turbo_v2', // Fast UK English model
+          model_id: 'eleven_multilingual_v2', // Multilingual model for Indian English
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.75,
