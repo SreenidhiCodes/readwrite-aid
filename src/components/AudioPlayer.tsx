@@ -31,25 +31,34 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
   useEffect(() => {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
-      // Filter for Indian English female voices, fallback to any English female voice
+      
+      // Priority 1: Indian English voices (better pronunciation of Indian words)
       const indianVoices = voices.filter(v => 
-        v.lang.includes('en-IN') || 
-        v.lang.includes('en_IN') ||
-        (v.lang.includes('en') && v.name.toLowerCase().includes('female'))
+        v.lang.includes('en-IN') || v.lang.includes('en_IN')
       );
       
-      setAvailableVoices(indianVoices.length > 0 ? indianVoices : voices.filter(v => v.lang.includes('en')));
+      // Priority 2: Any English voices
+      const englishVoices = voices.filter(v => v.lang.startsWith('en'));
       
-      // Set default voice
+      // Set available voices (prioritize Indian, then English)
+      const voiceList = indianVoices.length > 0 ? indianVoices : englishVoices;
+      setAvailableVoices(voiceList.length > 0 ? voiceList : voices);
+      
+      // Select default voice: Indian > Female English > Any English
+      let defaultVoice = null;
       if (indianVoices.length > 0) {
-        setSelectedVoice(indianVoices[0]);
-      } else if (voices.length > 0) {
-        const femaleVoice = voices.find(v => 
+        defaultVoice = indianVoices[0];
+      } else {
+        const femaleVoice = englishVoices.find(v => 
           v.name.toLowerCase().includes('female') || 
-          v.name.toLowerCase().includes('woman')
+          v.name.toLowerCase().includes('woman') ||
+          v.name.toLowerCase().includes('samantha') ||
+          v.name.toLowerCase().includes('victoria')
         );
-        setSelectedVoice(femaleVoice || voices[0]);
+        defaultVoice = femaleVoice || englishVoices[0] || voices[0];
       }
+      
+      setSelectedVoice(defaultVoice);
     };
 
     loadVoices();

@@ -53,11 +53,19 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
       if (fullText.trim().length < 50) {
         toast({
           title: "Using OCR",
-          description: "Detecting text from scanned/image-based PDF...",
+          description: "Detecting handwritten and scanned text...",
         });
 
         fullText = ""; // Reset text
-        const worker = await createWorker("eng");
+        const worker = await createWorker("eng", 1, {
+          logger: (m) => console.log(m),
+        });
+        
+        // Configure Tesseract for better handwriting recognition
+        await worker.setParameters({
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?-:;\'"()[]{}',
+          preserve_interword_spaces: '1',
+        } as any);
         
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
@@ -76,9 +84,11 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
               canvas: canvas,
             }).promise;
 
-            // Convert canvas to image and run OCR
+            // Convert canvas to image and run OCR with enhanced settings
             const imageData = canvas.toDataURL("image/png");
-            const { data: { text } } = await worker.recognize(imageData);
+            const { data: { text } } = await worker.recognize(imageData, {
+              rotateAuto: true,
+            });
             fullText += text + "\n\n";
           }
           
