@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import * as pdfjsLib from "pdfjs-dist";
+import { createWorker } from "tesseract.js";
 
 // Configure PDF.js worker for Vite
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -29,14 +30,15 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      setProgress(30);
+      setProgress(20);
       
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      setProgress(50);
+      setProgress(30);
       
       let fullText = "";
       const totalPages = pdf.numPages;
 
+      // First, try to extract embedded text
       for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
@@ -44,11 +46,50 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           .map((item: any) => item.str)
           .join(" ");
         fullText += pageText + "\n\n";
-        setProgress(50 + (i / totalPages) * 50);
+        setProgress(30 + (i / totalPages) * 20);
+      }
+
+      // If no text found or very little text, use OCR
+      if (fullText.trim().length < 50) {
+        toast({
+          title: "Using OCR",
+          description: "Detecting text from scanned/image-based PDF...",
+        });
+
+        fullText = ""; // Reset text
+        const worker = await createWorker("eng");
+        
+        for (let i = 1; i <= totalPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2.0 });
+          
+          // Create canvas to render page
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          if (context) {
+            await page.render({
+              canvasContext: context,
+              viewport: viewport,
+              canvas: canvas,
+            }).promise;
+
+            // Convert canvas to image and run OCR
+            const imageData = canvas.toDataURL("image/png");
+            const { data: { text } } = await worker.recognize(imageData);
+            fullText += text + "\n\n";
+          }
+          
+          setProgress(50 + (i / totalPages) * 50);
+        }
+
+        await worker.terminate();
       }
 
       if (!fullText.trim()) {
-        throw new Error("No text found in PDF. It might be an image-based PDF.");
+        throw new Error("Could not extract any text from PDF");
       }
 
       setProgress(100);
@@ -263,7 +304,8 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
             <div className="text-sm text-foreground/90">
               <p className="font-medium mb-1">Supported sources:</p>
               <p className="text-muted-foreground">
-                • PDF documents with selectable text (up to 100MB)<br />
+                • PDF documents - text-based or scanned/handwritten (up to 100MB)<br />
+                • OCR automatically detects text from images and scanned documents<br />
                 • Google Drive links (file must be publicly accessible)
               </p>
             </div>
