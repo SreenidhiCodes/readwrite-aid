@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
   SelectContent,
@@ -20,16 +19,49 @@ interface AudioPlayerProps {
 export const AudioPlayer = ({ text }: AudioPlayerProps) => {
   const { toast } = useToast();
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [speed, setSpeed] = useState(1.0);
-  const [voice, setVoice] = useState("Matilda");
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [progress, setProgress] = useState(0);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const chunksRef = useRef<string[]>([]);
+  const currentChunkRef = useRef(0);
 
-  // Split text into chunks (ElevenLabs has character limits)
-  const chunkText = (text: string, maxLength: number = 2500) => {
+  // Load available voices
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      // Filter for Indian English female voices, fallback to any English female voice
+      const indianVoices = voices.filter(v => 
+        v.lang.includes('en-IN') || 
+        v.lang.includes('en_IN') ||
+        (v.lang.includes('en') && v.name.toLowerCase().includes('female'))
+      );
+      
+      setAvailableVoices(indianVoices.length > 0 ? indianVoices : voices.filter(v => v.lang.includes('en')));
+      
+      // Set default voice
+      if (indianVoices.length > 0) {
+        setSelectedVoice(indianVoices[0]);
+      } else if (voices.length > 0) {
+        const femaleVoice = voices.find(v => 
+          v.name.toLowerCase().includes('female') || 
+          v.name.toLowerCase().includes('woman')
+        );
+        setSelectedVoice(femaleVoice || voices[0]);
+      }
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
+
+  // Split text into chunks (Speech Synthesis has character limits)
+  const chunkText = (text: string, maxLength: number = 200) => {
     const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
     const chunks: string[] = [];
     let currentChunk = "";
@@ -47,173 +79,114 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
     return chunks;
   };
 
-  const generateAudio = async () => {
-    setIsGenerating(true);
-    try {
-      const chunks = chunkText(text);
-      
+  const speakNextChunk = () => {
+    if (currentChunkRef.current >= chunksRef.current.length) {
+      setIsPlaying(false);
+      setProgress(100);
       toast({
-        title: "Generating audio...",
-        description: `Processing ${chunks.length} text segment(s)`,
+        title: "Completed!",
+        description: "Finished reading the document",
       });
+      return;
+    }
 
-      // Generate audio for all chunks and concatenate
-      const audioChunks: string[] = [];
-      
-      for (let i = 0; i < chunks.length; i++) {
-        toast({
-          title: "Processing...",
-          description: `Segment ${i + 1} of ${chunks.length}`,
-        });
-        
-        const { data, error } = await supabase.functions.invoke('text-to-speech', {
-          body: { text: chunks[i], voice }
-        });
+    const utterance = new SpeechSynthesisUtterance(chunksRef.current[currentChunkRef.current]);
+    utterance.rate = speed;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
 
-        if (error) throw error;
-        if (data?.audioContent) {
-          audioChunks.push(data.audioContent);
-        }
-      }
+    utterance.onend = () => {
+      currentChunkRef.current += 1;
+      const progressPercent = (currentChunkRef.current / chunksRef.current.length) * 100;
+      setProgress(progressPercent);
+      speakNextChunk();
+    };
 
-      if (audioChunks.length === 0) throw new Error("No audio generated");
-
-      // Use the first audio chunk (concatenating multiple audio files is complex)
-      // For better experience, we'll use the first chunk or combine them in a more sophisticated way later
-      const audioUrl = `data:audio/mpeg;base64,${audioChunks[0]}`;
-      
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl;
-        audioRef.current.playbackRate = speed;
-        audioRef.current.load();
-      } else {
-        const audio = new Audio(audioUrl);
-        audio.playbackRate = speed;
-        audioRef.current = audio;
-
-        audio.onloadedmetadata = () => {
-          setDuration(audio.duration);
-        };
-
-        audio.onended = () => {
-          setIsPlaying(false);
-          setCurrentTime(0);
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-          }
-        };
-
-        audio.onerror = () => {
-          toast({
-            title: "Error",
-            description: "Failed to play audio",
-            variant: "destructive",
-          });
-          setIsPlaying(false);
-        };
-      }
-
-      toast({
-        title: "Ready to play!",
-        description: `Complete PDF converted with ${voice} voice`,
-      });
-    } catch (error) {
-      console.error('Error generating audio:', error);
+    utterance.onerror = (error) => {
+      console.error('Speech synthesis error:', error);
       toast({
         title: "Error",
-        description: "Failed to generate audio. Please try again.",
+        description: "Failed to play audio. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setIsGenerating(false);
-    }
+      setIsPlaying(false);
+    };
+
+    utteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
   };
 
-  const handlePlayPause = async () => {
-    if (!audioRef.current) {
-      await generateAudio();
+  const handlePlayPause = () => {
+    if (!selectedVoice) {
+      toast({
+        title: "No voice available",
+        description: "Please wait for voices to load",
+        variant: "destructive",
+      });
       return;
     }
 
     if (isPlaying) {
-      audioRef.current.pause();
+      window.speechSynthesis.cancel();
       setIsPlaying(false);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
     } else {
-      try {
-        await audioRef.current.play();
-        setIsPlaying(true);
-
-        // Update current time
-        intervalRef.current = setInterval(() => {
-          if (audioRef.current) {
-            setCurrentTime(audioRef.current.currentTime);
-          }
-        }, 100);
-      } catch (error) {
-        console.error('Error playing audio:', error);
-        toast({
-          title: "Error",
-          description: "Failed to play audio",
-          variant: "destructive",
-        });
-      }
+      chunksRef.current = chunkText(text);
+      currentChunkRef.current = 0;
+      setProgress(0);
+      setIsPlaying(true);
+      
+      toast({
+        title: "Starting playback",
+        description: `Reading ${chunksRef.current.length} text segments`,
+      });
+      
+      speakNextChunk();
     }
   };
 
   const handleRestart = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      setCurrentTime(0);
-    }
+    window.speechSynthesis.cancel();
     setIsPlaying(false);
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
+    setProgress(0);
+    currentChunkRef.current = 0;
   };
 
   const handleSpeedChange = (value: number[]) => {
     const newSpeed = value[0];
     setSpeed(newSpeed);
     
-    if (audioRef.current) {
-      audioRef.current.playbackRate = newSpeed;
+    if (isPlaying && utteranceRef.current) {
+      // Restart with new speed
+      const wasPlaying = isPlaying;
+      window.speechSynthesis.cancel();
+      if (wasPlaying) {
+        speakNextChunk();
+      }
     }
   };
 
-  const handleVoiceChange = (newVoice: string) => {
-    setVoice(newVoice);
-    // Reset audio to regenerate with new voice
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
+  const handleVoiceChange = (voiceName: string) => {
+    const voice = availableVoices.find(v => v.name === voiceName);
+    if (voice) {
+      setSelectedVoice(voice);
+      if (isPlaying) {
+        // Restart with new voice
+        window.speechSynthesis.cancel();
+        setIsPlaying(false);
+        setProgress(0);
+      }
     }
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
   };
 
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      window.speechSynthesis.cancel();
     };
   }, []);
-
-  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   return (
     <Card className="p-6 bg-card/80 backdrop-blur-sm border-border shadow-lg">
@@ -227,12 +200,12 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
         <div className="h-2 bg-secondary rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-hero transition-all duration-300"
-            style={{ width: `${progressPercentage}%` }}
+            style={{ width: `${progress}%` }}
           />
         </div>
         <div className="flex justify-between text-xs text-muted-foreground mt-2">
-          <span>{formatTime(currentTime)}</span>
-          <span>{duration > 0 ? formatTime(duration) : '--:--'}</span>
+          <span>{Math.round(progress)}% Complete</span>
+          <span>{chunksRef.current.length > 0 ? `${currentChunkRef.current}/${chunksRef.current.length} segments` : 'Ready'}</span>
         </div>
       </div>
 
@@ -241,18 +214,16 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
         <Button
           onClick={handlePlayPause}
           size="lg"
-          disabled={isGenerating}
+          disabled={!selectedVoice}
           className="bg-gradient-hero hover:opacity-90 transition-opacity"
         >
-          {isGenerating ? (
-            <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : isPlaying ? (
+          {isPlaying ? (
             <Pause className="h-5 w-5" />
           ) : (
             <Play className="h-5 w-5 ml-0.5" />
           )}
           <span className="ml-2">
-            {isGenerating ? "Generating..." : isPlaying ? "Pause" : "Play"}
+            {isPlaying ? "Pause" : "Play"}
           </span>
         </Button>
 
@@ -260,7 +231,7 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
           onClick={handleRestart}
           variant="secondary"
           size="lg"
-          disabled={!audioRef.current}
+          disabled={!isPlaying && progress === 0}
         >
           <RotateCcw className="h-5 w-5" />
           <span className="ml-2">Restart</span>
@@ -269,16 +240,28 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
 
       {/* Voice Selection */}
       <div className="mb-6">
-        <label className="text-sm font-medium mb-2 block">Voice (Indian English)</label>
-        <Select value={voice} onValueChange={handleVoiceChange}>
+        <label className="text-sm font-medium mb-2 block">Voice</label>
+        <Select 
+          value={selectedVoice?.name} 
+          onValueChange={handleVoiceChange}
+          disabled={availableVoices.length === 0}
+        >
           <SelectTrigger className="w-full">
-            <SelectValue />
+            <SelectValue placeholder={availableVoices.length === 0 ? "Loading voices..." : "Select a voice"} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="Matilda">Matilda (Female)</SelectItem>
-            <SelectItem value="River">River (Female - Alternative)</SelectItem>
+            {availableVoices.map((voice) => (
+              <SelectItem key={voice.name} value={voice.name}>
+                {voice.name} ({voice.lang})
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
+        {availableVoices.length === 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Loading available voices...
+          </p>
+        )}
       </div>
 
       {/* Speed Control */}
