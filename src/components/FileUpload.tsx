@@ -24,6 +24,30 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
   const [progress, setProgress] = useState(0);
   const [googleDriveLink, setGoogleDriveLink] = useState("");
 
+  const correctTextWithAI = async (rawText: string): Promise<string> => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/correct-ocr-text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ text: rawText }),
+      });
+
+      if (!response.ok) {
+        console.error("AI correction failed, using raw text");
+        return rawText;
+      }
+
+      const { correctedText } = await response.json();
+      return correctedText || rawText;
+    } catch (error) {
+      console.error("Error correcting text:", error);
+      return rawText;
+    }
+  };
+
   const extractTextFromPDF = async (file: File) => {
     setIsProcessing(true);
     setProgress(10);
@@ -46,14 +70,14 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           .map((item: any) => item.str)
           .join(" ");
         fullText += pageText + "\n\n";
-        setProgress(30 + (i / totalPages) * 20);
+        setProgress(30 + (i / totalPages) * 15);
       }
 
       // If no text found or very little text, use OCR
       if (fullText.trim().length < 50) {
         toast({
-          title: "Using OCR",
-          description: "Detecting handwritten and scanned text...",
+          title: "Using Advanced OCR",
+          description: "Extracting text from handwritten and scanned documents...",
         });
 
         fullText = ""; // Reset text
@@ -61,15 +85,17 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           logger: (m) => console.log(m),
         });
         
-        // Configure Tesseract for better handwriting recognition
+        // Configure Tesseract for maximum accuracy on handwriting
         await worker.setParameters({
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?-:;\'"()[]{}',
+          tessedit_pageseg_mode: '1', // Automatic page segmentation with OSD
+          tessedit_ocr_engine_mode: '1', // Neural nets LSTM engine
           preserve_interword_spaces: '1',
+          tessedit_char_whitelist: '',  // Allow all characters for better recognition
         } as any);
         
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 2.0 });
+          const viewport = page.getViewport({ scale: 3.0 }); // Higher scale for better quality
           
           // Create canvas to render page
           const canvas = document.createElement("canvas");
@@ -78,13 +104,14 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           canvas.height = viewport.height;
 
           if (context) {
+            // Use better rendering settings
             await page.render({
               canvasContext: context,
               viewport: viewport,
               canvas: canvas,
             }).promise;
 
-            // Convert canvas to image and run OCR with enhanced settings
+            // Convert canvas to image and run OCR
             const imageData = canvas.toDataURL("image/png");
             const { data: { text } } = await worker.recognize(imageData, {
               rotateAuto: true,
@@ -92,10 +119,20 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
             fullText += text + "\n\n";
           }
           
-          setProgress(50 + (i / totalPages) * 50);
+          setProgress(45 + (i / totalPages) * 30);
         }
 
         await worker.terminate();
+        setProgress(75);
+
+        // Use AI to correct and improve the OCR text
+        toast({
+          title: "AI Text Correction",
+          description: "Improving text accuracy with AI...",
+        });
+        
+        fullText = await correctTextWithAI(fullText);
+        setProgress(90);
       }
 
       if (!fullText.trim()) {
