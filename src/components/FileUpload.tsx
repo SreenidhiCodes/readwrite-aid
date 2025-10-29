@@ -24,6 +24,31 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
   const [progress, setProgress] = useState(0);
   const [googleDriveLink, setGoogleDriveLink] = useState("");
 
+  const preprocessImage = (canvas: HTMLCanvasElement): HTMLCanvasElement => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return canvas;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Auto contrast boost + noise removal
+    for (let i = 0; i < data.length; i += 4) {
+      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      
+      // Increase contrast
+      const contrast = 1.5;
+      let adjusted = ((avg - 128) * contrast) + 128;
+      
+      // Apply threshold for noise removal
+      adjusted = adjusted > 140 ? 255 : adjusted < 100 ? 0 : adjusted;
+      
+      data[i] = data[i + 1] = data[i + 2] = adjusted;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+  };
+
   const correctTextWithAI = async (rawText: string): Promise<string> => {
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/correct-ocr-text`, {
@@ -85,12 +110,12 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           logger: (m) => console.log(m),
         });
         
-        // Configure Tesseract for maximum accuracy on handwriting
+        // Configure Tesseract for maximum accuracy on handwriting with confidence scoring
         await worker.setParameters({
-          tessedit_pageseg_mode: '1', // Automatic page segmentation with OSD
+          tessedit_pageseg_mode: '3', // Fully automatic page segmentation, no OSD
           tessedit_ocr_engine_mode: '1', // Neural nets LSTM engine
           preserve_interword_spaces: '1',
-          tessedit_char_whitelist: '',  // Allow all characters for better recognition
+          tessedit_char_whitelist: '',  // Allow all characters
         } as any);
         
         for (let i = 1; i <= totalPages; i++) {
@@ -104,19 +129,33 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           canvas.height = viewport.height;
 
           if (context) {
-            // Use better rendering settings
+            // Render page to canvas
             await page.render({
               canvasContext: context,
               viewport: viewport,
               canvas: canvas,
             }).promise;
 
-            // Convert canvas to image and run OCR
+            // Preprocess image: contrast boost + noise removal
+            preprocessImage(canvas);
+
+            // Convert canvas to image and run OCR with confidence data
             const imageData = canvas.toDataURL("image/png");
-            const { data: { text } } = await worker.recognize(imageData, {
+            const result = await worker.recognize(imageData, {
               rotateAuto: true,
             });
-            fullText += text + "\n\n";
+
+            // Filter words by confidence and mark uncertain ones
+            const ocrData = result.data as any;
+            const words = ocrData.words || [];
+            const processedWords = words.map((word: any) => {
+              if (word.confidence < 70) {
+                return "[?]";
+              }
+              return word.text;
+            }).join(" ");
+
+            fullText += processedWords + "\n\n";
           }
           
           setProgress(45 + (i / totalPages) * 30);
