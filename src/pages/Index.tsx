@@ -20,18 +20,21 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-subtle">
+    <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-glow pointer-events-none" />
       <Header />
       
-      <main className="container mx-auto px-4 py-8 max-w-6xl">
+      <main className="container mx-auto px-4 py-10 max-w-7xl relative z-10">
         {!extractedText ? (
-          <FileUpload 
-            onTextExtracted={setExtractedText} 
-            isProcessing={isProcessing}
-            setIsProcessing={setIsProcessing}
-          />
+          <div className="animate-fade-in-up">
+            <FileUpload 
+              onTextExtracted={setExtractedText} 
+              isProcessing={isProcessing}
+              setIsProcessing={setIsProcessing}
+            />
+          </div>
         ) : (
-          <div className="space-y-6 animate-in fade-in duration-500">
+          <div className="space-y-6 animate-fade-in-up">
             <VoiceInput onTextReceived={handleVoiceInput} />
             <AudioPlayer text={extractedText} />
             <TextDisplay 

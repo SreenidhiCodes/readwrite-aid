@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Check, Upload, Edit, Save } from "lucide-react";
+import { Copy, Check, FileText, Edit2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
@@ -50,85 +50,97 @@ export const TextDisplay = ({ text, onReset, onTextUpdate }: TextDisplayProps) =
   };
 
   return (
-    <Card className="p-6 bg-reading-bg border-border shadow-lg">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-reading-text">
-          {isEditing ? "Edit Text" : "Extracted Text"}
-        </h3>
-        <div className="flex gap-2">
-          {isEditing ? (
-            <Button
-              onClick={handleSave}
-              variant="default"
-              size="sm"
-            >
-              <Save className="h-4 w-4" />
-              <span className="ml-2">Save</span>
-            </Button>
-          ) : (
-            <Button
-              onClick={handleEdit}
-              variant="secondary"
-              size="sm"
-            >
-              <Edit className="h-4 w-4" />
-              <span className="ml-2">Edit</span>
-            </Button>
-          )}
-          <Button
-            onClick={handleCopy}
-            variant="secondary"
-            size="sm"
-          >
-            {copied ? (
-              <Check className="h-4 w-4" />
+    <Card className="overflow-hidden bg-gradient-card backdrop-blur-sm border-border shadow-medium">
+      <div className="p-5 border-b border-border bg-gradient-to-r from-secondary/50 to-secondary/30">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-bold flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <FileText className="h-6 w-6 text-primary" />
+            </div>
+            {isEditing ? "Edit Text" : "Extracted Text"}
+          </h3>
+          <div className="flex gap-2">
+            {isEditing ? (
+              <Button onClick={handleSave} size="sm" className="px-4 py-2 bg-success hover:bg-success/90 rounded-lg font-semibold shadow-soft">
+                <Save className="h-4 w-4 mr-2" />
+                Save
+              </Button>
             ) : (
-              <Copy className="h-4 w-4" />
+              <Button onClick={handleEdit} size="sm" variant="secondary" className="px-4 py-2 rounded-lg font-semibold hover:bg-secondary/80 border-2 border-transparent hover:border-primary/30">
+                <Edit2 className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
             )}
-            <span className="ml-2">{copied ? "Copied" : "Copy"}</span>
-          </Button>
-          <Button
-            onClick={onReset}
-            variant="outline"
-            size="sm"
-          >
-            <Upload className="h-4 w-4" />
-            <span className="ml-2">New PDF</span>
-          </Button>
+            
+            <Button
+              onClick={handleCopy}
+              size="sm"
+              variant="secondary"
+              disabled={copied}
+              className="px-4 py-2 rounded-lg font-semibold hover:bg-secondary/80 border-2 border-transparent hover:border-primary/30"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4 mr-2 text-success" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy
+                </>
+              )}
+            </Button>
+
+            <Button onClick={onReset} size="sm" variant="outline" className="px-4 py-2 rounded-lg font-semibold border-2 hover:bg-accent/10 hover:border-accent">
+              <FileText className="h-4 w-4 mr-2" />
+              New PDF
+            </Button>
+          </div>
         </div>
       </div>
 
-      {isEditing ? (
-        <Textarea
-          value={editedText}
-          onChange={(e) => setEditedText(e.target.value)}
-          className="min-h-[600px] text-reading-text leading-relaxed text-lg resize-none"
-          placeholder="Edit the extracted text here..."
-        />
-      ) : (
-        <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-          <p className="text-reading-text leading-relaxed whitespace-pre-wrap text-lg">
+      <div className="p-8">
+        {isEditing ? (
+          <Textarea
+            value={editedText}
+            onChange={(e) => setEditedText(e.target.value)}
+            className="min-h-[350px] w-full resize-none font-mono text-base leading-relaxed rounded-xl border-2 focus:border-primary p-4 shadow-soft"
+            placeholder="Edit your text here..."
+          />
+        ) : (
+          <div
+            className="prose prose-slate max-w-none min-h-[350px] overflow-y-auto max-h-[600px] px-2"
+            style={{
+              whiteSpace: "pre-wrap",
+              fontFamily: "ui-serif, Georgia, Cambria, serif",
+              fontSize: "1.125rem",
+              lineHeight: "1.9",
+              color: "hsl(var(--reading-text))",
+            }}
+          >
             {text}
-          </p>
-        </div>
-      )}
+          </div>
+        )}
 
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: hsl(var(--secondary));
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: hsl(var(--primary));
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: hsl(var(--primary) / 0.8);
-        }
-      `}</style>
+        {/* Custom scrollbar styling */}
+        <style>{`
+          .prose::-webkit-scrollbar {
+            width: 10px;
+          }
+          .prose::-webkit-scrollbar-track {
+            background: hsl(var(--secondary));
+            border-radius: 8px;
+          }
+          .prose::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+            border-radius: 8px;
+          }
+          .prose::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, hsl(var(--primary-glow)), hsl(var(--primary)));
+          }
+        `}</style>
+      </div>
     </Card>
   );
 };

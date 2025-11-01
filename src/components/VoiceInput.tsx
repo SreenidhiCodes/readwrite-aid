@@ -100,13 +100,15 @@ export const VoiceInput = ({ onTextReceived }: VoiceInputProps) => {
   };
 
   return (
-    <Card className="p-4 bg-card/80 backdrop-blur-sm border-border">
-      <div className="flex items-center gap-3">
+    <Card className="p-5 bg-gradient-card backdrop-blur-sm border-border shadow-soft hover:shadow-medium transition-shadow">
+      <div className="flex items-center gap-4">
         <Button
           onClick={toggleListening}
           size="lg"
           variant={isListening ? "destructive" : "secondary"}
-          className="flex-shrink-0"
+          className={`flex-shrink-0 px-6 py-6 rounded-xl font-semibold shadow-soft transition-all ${
+            isListening ? 'animate-pulse-glow' : 'hover:scale-105'
+          }`}
         >
           {isListening ? (
             <>
@@ -116,20 +118,20 @@ export const VoiceInput = ({ onTextReceived }: VoiceInputProps) => {
           ) : (
             <>
               <Mic className="h-5 w-5" />
-              <span className="ml-2">Voice Input</span>
+              <span className="ml-2">Voice Commands</span>
             </>
           )}
         </Button>
 
         {transcript && (
-          <div className="flex-1 px-4 py-2 bg-secondary rounded-lg">
-            <p className="text-sm text-muted-foreground italic">"{transcript}"</p>
+          <div className="flex-1 px-5 py-3 bg-primary/10 border border-primary/20 rounded-xl animate-fade-in">
+            <p className="text-sm text-foreground font-medium italic">"{transcript}"</p>
           </div>
         )}
 
         {!transcript && !isListening && (
-          <p className="text-sm text-muted-foreground">
-            Click to use voice input like Google Assistant
+          <p className="text-sm text-muted-foreground font-medium">
+            Use voice commands to control playback and navigation
           </p>
         )}
       </div>

@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, RotateCcw, Volume2 } from "lucide-react";
+import { Play, Pause, RotateCcw, Volume2, Settings, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -198,98 +199,102 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
   }, []);
 
   return (
-    <Card className="p-6 bg-card/80 backdrop-blur-sm border-border shadow-lg">
-      <div className="flex items-center gap-2 mb-4">
-        <Volume2 className="h-5 w-5 text-primary" />
-        <h3 className="text-lg font-semibold">Listen Mode</h3>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="h-2 bg-secondary rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-gradient-hero transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-xs text-muted-foreground mt-2">
-          <span>{Math.round(progress)}% Complete</span>
-          <span>{chunksRef.current.length > 0 ? `${currentChunkRef.current}/${chunksRef.current.length} segments` : 'Ready'}</span>
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div className="flex items-center gap-3 mb-6">
-        <Button
-          onClick={handlePlayPause}
-          size="lg"
-          disabled={!selectedVoice}
-          className="bg-gradient-hero hover:opacity-90 transition-opacity"
-        >
-          {isPlaying ? (
-            <Pause className="h-5 w-5" />
-          ) : (
-            <Play className="h-5 w-5 ml-0.5" />
-          )}
-          <span className="ml-2">
-            {isPlaying ? "Pause" : "Play"}
-          </span>
-        </Button>
-
-        <Button
-          onClick={handleRestart}
-          variant="secondary"
-          size="lg"
-          disabled={!isPlaying && progress === 0}
-        >
-          <RotateCcw className="h-5 w-5" />
-          <span className="ml-2">Restart</span>
-        </Button>
-      </div>
-
-      {/* Voice Selection */}
-      <div className="mb-6">
-        <label className="text-sm font-medium mb-2 block">Voice</label>
-        <Select 
-          value={selectedVoice?.name} 
-          onValueChange={handleVoiceChange}
-          disabled={availableVoices.length === 0}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder={availableVoices.length === 0 ? "Loading voices..." : "Select a voice"} />
-          </SelectTrigger>
-          <SelectContent>
-            {availableVoices.map((voice) => (
-              <SelectItem key={voice.name} value={voice.name}>
-                {voice.name} ({voice.lang})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {availableVoices.length === 0 && (
-          <p className="text-xs text-muted-foreground mt-1">
-            Loading available voices...
-          </p>
-        )}
-      </div>
-
-      {/* Speed Control */}
-      <div className="space-y-2">
+    <Card className="p-6 bg-gradient-card backdrop-blur-sm border-border shadow-medium hover:shadow-large transition-shadow">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium">Speed</label>
-          <span className="text-sm font-semibold text-primary">{speed.toFixed(1)}×</span>
+          <h3 className="text-xl font-bold flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Volume2 className={`h-6 w-6 text-primary ${isPlaying ? 'animate-pulse' : ''}`} />
+            </div>
+            Audio Player
+          </h3>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-success animate-pulse' : 'bg-muted'}`} />
+            <span className="text-sm text-muted-foreground font-semibold">
+              {Math.round(progress)}% complete
+            </span>
+          </div>
         </div>
-        <Slider
-          value={[speed]}
-          onValueChange={handleSpeedChange}
-          min={0.5}
-          max={2.0}
-          step={0.1}
-          className="w-full"
-        />
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>0.5× Slow</span>
-          <span>2.0× Fast</span>
+
+        <div className="space-y-2">
+          <Progress value={progress} className="w-full h-3" />
+          {isPlaying && (
+            <div className="h-1 bg-gradient-hero rounded-full animate-pulse" />
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handlePlayPause}
+            size="lg"
+            className="flex-shrink-0 px-8 py-6 bg-gradient-hero hover:shadow-glow font-semibold rounded-xl transition-all hover:scale-105"
+          >
+            {isPlaying ? (
+              <>
+                <Pause className="h-6 w-6" />
+                <span className="ml-2 text-base">Pause</span>
+              </>
+            ) : (
+              <>
+                <Play className="h-6 w-6" />
+                <span className="ml-2 text-base">Play</span>
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={handleRestart}
+            size="lg"
+            variant="outline"
+            className="px-6 py-6 rounded-xl font-semibold hover:bg-secondary/80 hover:scale-105 transition-all border-2"
+          >
+            <RotateCcw className="h-5 w-5" />
+            <span className="ml-2">Restart</span>
+          </Button>
+        </div>
+
+        <div className="space-y-5 pt-2">
+          <div className="space-y-3">
+            <label className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <User className="h-4 w-4 text-primary" />
+              Select Voice
+            </label>
+            <Select value={selectedVoice?.name} onValueChange={handleVoiceChange}>
+              <SelectTrigger className="w-full h-12 rounded-xl border-2 font-medium">
+                <SelectValue placeholder="Choose a voice" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableVoices.map((voice) => (
+                  <SelectItem key={voice.name} value={voice.name} className="font-medium">
+                    {voice.name} ({voice.lang})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-sm font-semibold flex items-center justify-between text-foreground">
+              <span className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-primary" />
+                Playback Speed
+              </span>
+              <span className="text-primary font-bold">{speed}x</span>
+            </label>
+            <Slider
+              value={[speed]}
+              onValueChange={handleSpeedChange}
+              min={0.5}
+              max={2}
+              step={0.1}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground font-medium">
+              <span>0.5x (Slow)</span>
+              <span>1x (Normal)</span>
+              <span>2x (Fast)</span>
+            </div>
+          </div>
         </div>
       </div>
     </Card>

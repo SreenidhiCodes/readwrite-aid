@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Upload, FileText, AlertCircle } from "lucide-react";
+import { Upload, FileText, AlertCircle, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -110,42 +110,35 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           logger: (m) => console.log(m),
         });
         
-        // Configure Tesseract for maximum accuracy on handwriting with confidence scoring
         await worker.setParameters({
-          tessedit_pageseg_mode: '3', // Fully automatic page segmentation, no OSD
-          tessedit_ocr_engine_mode: '1', // Neural nets LSTM engine
+          tessedit_pageseg_mode: '3',
+          tessedit_ocr_engine_mode: '1',
           preserve_interword_spaces: '1',
-          tessedit_char_whitelist: '',  // Allow all characters
+          tessedit_char_whitelist: '',
         } as any);
         
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 3.0 }); // Higher scale for better quality
+          const viewport = page.getViewport({ scale: 3.0 });
           
-          // Create canvas to render page
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
           canvas.width = viewport.width;
           canvas.height = viewport.height;
 
           if (context) {
-            // Render page to canvas
             await page.render({
               canvasContext: context,
               viewport: viewport,
               canvas: canvas,
             }).promise;
 
-            // Preprocess image: contrast boost + noise removal
             preprocessImage(canvas);
-
-            // Convert canvas to image and run OCR with confidence data
             const imageData = canvas.toDataURL("image/png");
             const result = await worker.recognize(imageData, {
               rotateAuto: true,
             });
 
-            // Filter words by confidence and mark uncertain ones
             const ocrData = result.data as any;
             const words = ocrData.words || [];
             const processedWords = words.map((word: any) => {
@@ -164,7 +157,6 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
         await worker.terminate();
         setProgress(75);
 
-        // Use AI to correct and improve the OCR text
         toast({
           title: "AI Text Correction",
           description: "Improving text accuracy with AI...",
@@ -253,7 +245,6 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
     setProgress(10);
 
     try {
-      // Extract file ID from Google Drive link
       const fileIdMatch = googleDriveLink.match(/[-\w]{25,}/);
       if (!fileIdMatch) {
         throw new Error("Invalid Google Drive link format");
@@ -264,7 +255,6 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
 
       setProgress(30);
 
-      // Fetch the PDF from Google Drive
       const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error("Failed to download PDF from Google Drive");
@@ -289,14 +279,18 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[70vh]">
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-8">
-          <h2 className="text-4xl font-bold mb-3 bg-gradient-hero bg-clip-text text-transparent">
-            Upload Your PDF
+    <div className="flex items-center justify-center min-h-[70vh] animate-fade-in-up">
+      <div className="w-full max-w-3xl">
+        <div className="text-center mb-10 space-y-3">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-4">
+            <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+            <span className="text-sm font-semibold text-primary">AI-Powered OCR</span>
+          </div>
+          <h2 className="text-5xl font-extrabold bg-gradient-hero bg-clip-text text-transparent tracking-tight">
+            Upload Your Document
           </h2>
-          <p className="text-muted-foreground text-lg">
-            Drag and drop or click to select a file (up to 100MB)
+          <p className="text-muted-foreground text-xl max-w-2xl mx-auto">
+            Transform handwritten or printed PDFs into perfect audio with intelligent AI correction
           </p>
         </div>
 
@@ -308,12 +302,11 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           onDragLeave={() => setIsDragging(false)}
           onDrop={onDrop}
           className={`
-            relative border-2 border-dashed rounded-2xl p-12 transition-all duration-300
+            relative border-2 border-dashed rounded-3xl p-16 transition-all duration-300 bg-gradient-card backdrop-blur-sm
             ${isDragging 
-              ? "border-primary bg-primary/5 scale-105" 
-              : "border-border bg-card hover:border-primary/50 hover:bg-card/80"
-            }
-            ${isProcessing ? "pointer-events-none opacity-60" : "cursor-pointer"}
+              ? "border-primary shadow-glow scale-[1.02]" 
+              : "border-border hover:border-primary/60 hover:shadow-medium"}
+            ${isProcessing ? "pointer-events-none opacity-70" : "cursor-pointer"}
           `}
         >
           <input
@@ -324,76 +317,108 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
 
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-6">
             {isProcessing ? (
               <>
-                <div className="bg-primary/10 p-4 rounded-full animate-pulse">
-                  <FileText className="h-12 w-12 text-primary" />
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-hero rounded-full blur-2xl opacity-50 animate-pulse" />
+                  <div className="relative p-8 bg-gradient-hero/20 rounded-full ring-4 ring-primary/30 animate-pulse-glow">
+                    <FileText className="h-16 w-16 text-primary animate-pulse" />
+                  </div>
                 </div>
-                <p className="text-lg font-medium">Processing your PDF...</p>
-                <Progress value={progress} className="w-full max-w-xs" />
-                <p className="text-sm text-muted-foreground">{Math.round(progress)}%</p>
+                <div className="space-y-4 w-full max-w-md">
+                  <p className="text-2xl font-bold text-foreground">Processing...</p>
+                  <Progress value={progress} className="w-full h-4 shadow-soft" />
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                    </div>
+                    <p className="text-lg text-muted-foreground font-semibold">{Math.round(progress)}%</p>
+                  </div>
+                </div>
               </>
             ) : (
               <>
-                <div className="bg-gradient-hero p-4 rounded-full">
-                  <Upload className="h-12 w-12 text-primary-foreground" />
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-gradient-hero rounded-full blur-3xl opacity-40 group-hover:opacity-60 transition-opacity" />
+                  <div className="relative p-10 bg-gradient-hero/10 rounded-full ring-4 ring-primary/20 group-hover:ring-primary/40 transition-all group-hover:scale-105">
+                    <Upload className="h-20 w-20 text-primary" />
+                  </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-lg font-medium mb-1">Drop your PDF here</p>
-                  <p className="text-sm text-muted-foreground">or click to browse</p>
+                <div className="text-center space-y-2">
+                  <p className="text-2xl font-bold text-foreground">Drop your PDF here</p>
+                  <p className="text-muted-foreground text-lg">or click to browse files (up to 100MB)</p>
                 </div>
-                <Button variant="secondary" size="lg" className="mt-2">
+                <Button size="lg" className="px-10 py-7 text-lg font-bold bg-gradient-hero hover:shadow-glow rounded-2xl transition-all hover:scale-105 shadow-medium">
+                  <FileText className="h-6 w-6 mr-3" />
                   Choose File
                 </Button>
+                <div className="flex items-center gap-5 pt-4">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Handwriting Support</span>
+                  </div>
+                  <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <FileText className="h-5 w-5 text-primary" />
+                    <span className="font-medium">AI Text Correction</span>
+                  </div>
+                </div>
               </>
             )}
           </div>
         </div>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-8 space-y-5">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
+              <span className="w-full border-t-2 border-border" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or</span>
+            <div className="relative flex justify-center text-sm uppercase">
+              <span className="bg-background px-4 text-muted-foreground font-semibold">Or Use Google Drive</span>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Google Drive Link</label>
-            <div className="flex gap-2">
+          <div className="space-y-3 bg-gradient-card p-6 rounded-2xl border-2 border-border shadow-soft">
+            <label className="text-base font-semibold text-foreground">Google Drive Link</label>
+            <div className="flex gap-3">
               <input
                 type="text"
                 value={googleDriveLink}
                 onChange={(e) => setGoogleDriveLink(e.target.value)}
                 placeholder="Paste your Google Drive link here"
                 disabled={isProcessing}
-                className="flex-1 px-4 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="flex-1 px-5 py-3 rounded-xl border-2 border-input bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all font-medium"
               />
               <Button
                 onClick={handleGoogleDriveLink}
                 disabled={isProcessing || !googleDriveLink.trim()}
+                size="lg"
                 variant="secondary"
+                className="px-6 rounded-xl font-semibold hover:scale-105 transition-all"
               >
                 Load PDF
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground font-medium">
               Make sure the file is set to "Anyone with the link can view"
             </p>
           </div>
 
-          <div className="p-4 bg-accent/10 border border-accent/20 rounded-xl flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-accent flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-foreground/90">
-              <p className="font-medium mb-1">Supported sources:</p>
-              <p className="text-muted-foreground">
-                • PDF documents - text-based or scanned/handwritten (up to 100MB)<br />
-                • OCR automatically detects text from images and scanned documents<br />
-                • Google Drive links (file must be publicly accessible)
-              </p>
+          <div className="p-6 bg-accent/10 border-2 border-accent/20 rounded-2xl flex items-start gap-4 shadow-soft">
+            <div className="p-2 bg-accent/20 rounded-lg flex-shrink-0">
+              <AlertCircle className="h-6 w-6 text-accent" />
+            </div>
+            <div className="text-sm text-foreground space-y-2">
+              <p className="font-bold text-base">What we support:</p>
+              <ul className="space-y-1 text-muted-foreground font-medium">
+                <li>• PDF documents - text-based or scanned/handwritten (up to 100MB)</li>
+                <li>• Advanced OCR for extracting text from images and scanned documents</li>
+                <li>• Google Drive links (file must be publicly accessible)</li>
+                <li>• AI-powered text correction for perfect accuracy</li>
+              </ul>
             </div>
           </div>
         </div>
