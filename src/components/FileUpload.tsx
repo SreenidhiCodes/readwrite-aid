@@ -51,6 +51,12 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
 
   const correctTextWithAI = async (rawText: string): Promise<string> => {
     try {
+      // Check if text has meaningful content before sending to AI
+      if (!rawText || rawText.trim().length === 0) {
+        console.log("No meaningful text to correct");
+        return rawText;
+      }
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/correct-ocr-text`, {
         method: 'POST',
         headers: {
@@ -157,12 +163,15 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
         await worker.terminate();
         setProgress(75);
 
-        toast({
-          title: "AI Text Correction",
-          description: "Improving text accuracy with AI...",
-        });
-        
-        fullText = await correctTextWithAI(fullText);
+        // Only attempt AI correction if we have meaningful text
+        if (fullText.trim().length > 0) {
+          toast({
+            title: "AI Text Correction",
+            description: "Improving text accuracy with AI...",
+          });
+          
+          fullText = await correctTextWithAI(fullText);
+        }
         setProgress(90);
       }
 
