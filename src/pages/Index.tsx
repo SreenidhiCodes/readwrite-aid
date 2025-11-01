@@ -4,6 +4,7 @@ import { AudioPlayer } from "@/components/AudioPlayer";
 import { TextDisplay } from "@/components/TextDisplay";
 import { VoiceInput } from "@/components/VoiceInput";
 import { Header } from "@/components/Header";
+import { FeedbackBox } from "@/components/FeedbackBox";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
@@ -44,6 +45,10 @@ const Index = () => {
             />
           </div>
         )}
+        
+        <div className="mt-12 animate-fade-in">
+          <FeedbackBox />
+        </div>
       </main>
     </div>
   );

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.correct-ocr-text]
 verify_jwt = false
+
+[functions.send-feedback]
+verify_jwt = false

@@ -301,6 +301,13 @@ export const FileUpload = ({ onTextExtracted, isProcessing, setIsProcessing }: F
           <p className="text-muted-foreground text-xl max-w-2xl mx-auto">
             Transform handwritten or printed PDFs into perfect audio with intelligent AI correction
           </p>
+          
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mt-6 max-w-2xl mx-auto">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold text-primary">📝 Note:</span> For best results, please upload documents with{" "}
+              <span className="font-semibold">neat, legible handwriting</span> (no cursive). Clear printing will help our OCR technology read your text more accurately.
+            </p>
+          </div>
         </div>
 
         <div

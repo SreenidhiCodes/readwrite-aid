@@ -141,20 +141,28 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
     }
 
     if (isPlaying) {
-      window.speechSynthesis.cancel();
+      // Pause instead of cancel to maintain position
+      window.speechSynthesis.pause();
       setIsPlaying(false);
     } else {
-      chunksRef.current = chunkText(text);
-      currentChunkRef.current = 0;
-      setProgress(0);
-      setIsPlaying(true);
-      
-      toast({
-        title: "Starting playback",
-        description: `Reading ${chunksRef.current.length} text segments`,
-      });
-      
-      speakNextChunk();
+      // If resuming, check if speech is paused
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        setIsPlaying(true);
+      } else {
+        // Starting fresh
+        chunksRef.current = chunkText(text);
+        currentChunkRef.current = 0;
+        setProgress(0);
+        setIsPlaying(true);
+        
+        toast({
+          title: "Starting playback",
+          description: `Reading ${chunksRef.current.length} text segments`,
+        });
+        
+        speakNextChunk();
+      }
     }
   };
 
@@ -170,12 +178,9 @@ export const AudioPlayer = ({ text }: AudioPlayerProps) => {
     setSpeed(newSpeed);
     
     if (isPlaying && utteranceRef.current) {
-      // Restart with new speed
-      const wasPlaying = isPlaying;
+      // Apply speed change immediately by restarting current chunk
       window.speechSynthesis.cancel();
-      if (wasPlaying) {
-        speakNextChunk();
-      }
+      speakNextChunk();
     }
   };
 
